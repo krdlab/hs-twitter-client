@@ -2,44 +2,69 @@
 module Main where
 
 import System.Environment (getArgs)
-import System.IO (stdout)
-import Data.ByteString (ByteString)
+
+import Data.ByteString (ByteString, append)
 import qualified Data.ByteString as BS
 import Data.ByteString.Char8 ()
-import Control.Monad.IO.Class (liftIO)
-import qualified Data.Conduit as C
-import qualified Data.Conduit.Binary as CB
-import qualified Data.Conduit.List as CL
-import qualified Data.Conduit.Text as CT
-import Data.Monoid
-import Network.HTTP.Conduit
-import Web.Authenticate.OAuth
+import qualified Data.ByteString.UTF8 as BU (fromString)
+import Data.Text (Text)
+import qualified Data.Text.IO as TI
+import qualified Data.Text.Encoding as TE
 
-import qualified System.IO.UTF8 as U
-import Data.ByteString.UTF8
 import Control.Applicative ((<$>), (<*>))
 import Control.Monad (mzero)
 import Data.Aeson
 import Data.Aeson.Types
-import Data.Text (Text)
-import qualified Data.Attoparsec as AP
 
+import Control.Monad.IO.Class (liftIO)
+import qualified Data.Conduit as C
 import qualified Data.Conduit.Attoparsec as CA
+import Network.HTTP.Conduit
+import Web.Authenticate.OAuth
 
-import Control.Exception (SomeException)
-import Control.Exception.Lifted (catch)
-import Prelude hiding (catch)
+--import Control.Exception (SomeException)
+--import Control.Exception.Lifted (catch)
+--import Prelude hiding (catch)
 
 import Data.ConfigFile
 import Data.Either.Utils (forceEither, eitherToMonadError)
 
-data Status = Status { text :: Text
-                     , createdAt :: String
-                     , user :: User
-                     } deriving (Show)
+main :: IO ()
+main = do
+  [confFile, op] <- getArgs
+  conf <- readfile emptyCP { optionxform = id } confFile
+  let cp = forceEither conf
+  let oauth = newOAuth { oauthConsumerKey    = forceByteString cp "oauthConsumerKey"
+                       , oauthConsumerSecret = forceByteString cp "oauthConsumerSecret" }
+  let credential = newCredential (forceByteString cp "accessToken") (forceByteString cp "accessSecret")
+  case op of
+    "user-stream"     -> userStream oauth credential
+    "update-statuses" -> updateStatuses oauth credential
+    _                   -> BS.putStrLn $ "unknown op"
 
-data User = User { screenName :: String
-                 } deriving (Show)
+-- conf から ByteString 値をとる
+forceByteString :: ConfigParser -> OptionSpec -> ByteString
+forceByteString cp key = BU.fromString $ forceConf cp key
+
+forceConf :: Get_C a => ConfigParser -> OptionSpec -> a
+forceConf cp key = forceEither $ get cp "DEFAULT" key
+
+-- userstream を取得しつづける
+userStream :: OAuth -> Credential -> IO ()
+userStream oauth credential = do
+  withManager $ \manager -> do
+    req <- parseUrl "https://userstream.twitter.com/2/user.json"
+    signedReq <- signOAuth oauth credential req
+    Response {..} <- http signedReq manager
+    responseBody C.$$ statusParser success failure
+
+data Status = Status { text :: Text
+                     , createdAt :: ByteString
+                     , user :: User
+                     }
+
+data User = User { screenName :: ByteString
+                 }
 
 instance FromJSON Status where
   parseJSON (Object v) = Status
@@ -53,34 +78,6 @@ instance FromJSON User where
                           <$> v .: "screen_name"
   parseJSON _          = mzero
 
--- とれなかったら error で
-forceConf :: Get_C a => ConfigParser -> OptionSpec -> a
-forceConf cp key = forceEither $ get cp "DEFAULT" key
-
-forceByteString :: ConfigParser -> OptionSpec -> ByteString
-forceByteString cp key = fromString $ forceConf cp key
-
-main :: IO ()
-main = do
-  [confFile, op] <- getArgs
-  conf <- readfile emptyCP { optionxform = id } confFile
-  let cp = forceEither conf
-  let oauth = newOAuth { oauthConsumerKey    = forceByteString cp "oauthConsumerKey"
-                       , oauthConsumerSecret = forceByteString cp "oauthConsumerSecret" }
-  let credential = newCredential (forceByteString cp "accessToken") (forceByteString cp "accessSecret")
-  case op of
-    "--user-stream"     -> userStream oauth credential
-    "--update-statuses" -> updateStatuses oauth credential
-    _                   -> BS.putStrLn $ "unknown op"
-
-userStream :: OAuth -> Credential -> IO ()
-userStream oauth credential = do
-  withManager $ \manager -> do
-    req <- parseUrl "https://userstream.twitter.com/2/user.json"
-    signedReq <- signOAuth oauth credential req
-    Response {..} <- http signedReq manager
-    responseBody C.$$ statusParser success failure
-
 statusParser :: (Status -> IO ()) -> (String -> IO ()) -> C.Sink ByteString (C.ResourceT IO) ()
 statusParser hs hf = do
   j <- CA.sinkParser json -- TODO catch ParseError
@@ -90,19 +87,26 @@ statusParser hs hf = do
   statusParser hs hf
 
 success :: Status -> IO ()
-success s = U.putStrLn . show $ s
+success Status {..} = do
+  let User {..} = user
+  BS.putStrLn $ "> " `append` screenName `append` " (" `append` createdAt `append` ")"
+  TI.putStrLn text
+  BS.putStrLn ""
 
 failure :: String -> IO ()
-failure m = U.putStrLn $ "JSON parse error: " ++ m
+failure m = putStrLn $ "> JSON parse error: " ++ m ++ "\n"
 
+-- 自分のステータスを更新する
 updateStatuses :: OAuth -> Credential -> IO ()
 updateStatuses oauth credential = do
-  BS.putStr "status="
-  status <- BS.getLine
+  status <- BS.putStr "status=" >> TI.getLine
   withManager $ \manager -> do
     baseReq <- parseUrl "https://api.twitter.com/1/statuses/update.json"
-    let req = urlEncodedBody [("status", status)] baseReq
+    let req = urlEncodedBody [("status", TE.encodeUtf8 status)] baseReq
     signedReq <- signOAuth oauth credential req
-    response <- http signedReq manager
-    responseBody response C.$$ CB.sinkHandle stdout
+    Response {..} <- http signedReq manager
+    liftIO . action $ responseStatus
+    return ()
+  where
+    action = putStrLn . show
 
