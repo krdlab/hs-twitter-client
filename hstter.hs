@@ -2,10 +2,12 @@
 module Main where
 
 import System.Environment (getArgs)
+import System.Locale (defaultTimeLocale)
+import Data.Time
 
-import Data.ByteString (ByteString, append)
+import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
-import Data.ByteString.Char8 ()
+import Data.ByteString.Char8 as BC (pack, unpack)
 import qualified Data.ByteString.UTF8 as BU (fromString)
 import Data.Text (Text)
 import qualified Data.Text.IO as TI
@@ -58,12 +60,14 @@ userStream oauth credential = do
     Response {..} <- http signedReq manager
     responseBody C.$$ statusParser success failure
 
+-- -- data type
 data Status = Status { text :: Text
                      , createdAt :: ByteString
                      , user :: User
                      }
 
 data User = User { screenName :: ByteString
+                 , name :: ByteString
                  }
 
 instance FromJSON Status where
@@ -76,8 +80,10 @@ instance FromJSON Status where
 instance FromJSON User where
   parseJSON (Object v) = User
                           <$> v .: "screen_name"
+                          <*> v .: "name"
   parseJSON _          = mzero
 
+-- -- parser
 statusParser :: (Status -> IO ()) -> (String -> IO ()) -> C.Sink ByteString (C.ResourceT IO) ()
 statusParser hs hf = do
   j <- CA.sinkParser json -- TODO catch ParseError
@@ -86,12 +92,19 @@ statusParser hs hf = do
     Error m                 -> liftIO . hf $ m
   statusParser hs hf
 
+-- -- action
 success :: Status -> IO ()
 success Status {..} = do
-  let User {..} = user
-  BS.putStrLn $ "> " `append` screenName `append` " (" `append` createdAt `append` ")"
-  TI.putStrLn text
-  BS.putStrLn ""
+  case parseCreatedAt $ BC.unpack createdAt of
+    Just ctime -> do
+      tzone <- getCurrentTimeZone
+      let User {..} = user
+      BS.putStrLn $ BS.concat [ "> ", screenName, ": ", name, " (", BC.pack . show $ utcToZonedTime tzone ctime, ")"]
+      TI.putStrLn text
+      BS.putStrLn ""
+    Nothing    -> putStrLn "> time parse error: created_at"
+  where
+    parseCreatedAt = parseTime defaultTimeLocale "%a %b %d %H:%M:%S %z %Y"
 
 failure :: String -> IO ()
 failure m = putStrLn $ "> JSON parse error: " ++ m ++ "\n"
