@@ -12,10 +12,7 @@ import Data.Text (Text)
 import qualified Data.Text.IO as TI
 import qualified Data.Text.Encoding as TE
 
-import Control.Applicative ((<$>), (<*>))
-import Control.Monad (mzero)
 import Data.Aeson
-import Data.Aeson.Types
 
 import Control.Monad.IO.Class (liftIO)
 import qualified Data.Conduit as C
@@ -28,6 +25,7 @@ import Web.Authenticate.OAuth
 --import Prelude hiding (catch)
 
 import Hstter.Config
+import Hstter.Model
 
 main :: IO ()
 main = do
@@ -49,29 +47,6 @@ userStream oauth credential = do
     signedReq <- signOAuth oauth credential req
     Response {..} <- http signedReq manager
     responseBody C.$$ statusParser success failure
-
--- -- data type
-data Status = Status { text :: Text
-                     , createdAt :: ByteString
-                     , user :: User
-                     }
-
-data User = User { screenName :: ByteString
-                 , name :: ByteString
-                 }
-
-instance FromJSON Status where
-  parseJSON (Object v) = Status
-                          <$> v .: "text"
-                          <*> v .: "created_at"
-                          <*> v .: "user"
-  parseJSON _          = mzero
-
-instance FromJSON User where
-  parseJSON (Object v) = User
-                          <$> v .: "screen_name"
-                          <*> v .: "name"
-  parseJSON _          = mzero
 
 -- -- parser
 statusParser :: (Status -> IO ()) -> (String -> IO ()) -> C.Sink ByteString (C.ResourceT IO) ()

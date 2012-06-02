@@ -14,7 +14,7 @@ Edit configuration file. (e.g. "twitter.conf")
 
 ## Build & Run
 
-    $ ghc --make hstter.hs
+    $ ghc --make hstter.hs config.hs model.hs
     $ ./hstter twitter.conf user-stream       # fetch and show your statuses
     $ ./hstter twitter.conf update-statuses   # update your statuses
     status=<input text>
