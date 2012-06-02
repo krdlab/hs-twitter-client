@@ -8,7 +8,6 @@ import Data.Time
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Char8 as BC (pack, unpack)
-import qualified Data.ByteString.UTF8 as BU (fromString)
 import Data.Text (Text)
 import qualified Data.Text.IO as TI
 import qualified Data.Text.Encoding as TE
@@ -28,14 +27,12 @@ import Web.Authenticate.OAuth
 --import Control.Exception.Lifted (catch)
 --import Prelude hiding (catch)
 
-import Data.ConfigFile
-import Data.Either.Utils (forceEither, eitherToMonadError)
+import Hstter.Config
 
 main :: IO ()
 main = do
   [confFile, op] <- getArgs
-  conf <- readfile emptyCP { optionxform = id } confFile
-  let cp = forceEither conf
+  cp <- readConfig confFile
   let oauth = newOAuth { oauthConsumerKey    = forceByteString cp "oauthConsumerKey"
                        , oauthConsumerSecret = forceByteString cp "oauthConsumerSecret" }
   let credential = newCredential (forceByteString cp "accessToken") (forceByteString cp "accessSecret")
@@ -43,13 +40,6 @@ main = do
     "user-stream"     -> userStream oauth credential
     "update-statuses" -> updateStatuses oauth credential
     _                   -> BS.putStrLn $ "unknown op"
-
--- conf から ByteString 値をとる
-forceByteString :: ConfigParser -> OptionSpec -> ByteString
-forceByteString cp key = BU.fromString $ forceConf cp key
-
-forceConf :: Get_C a => ConfigParser -> OptionSpec -> a
-forceConf cp key = forceEither $ get cp "DEFAULT" key
 
 -- userstream を取得しつづける
 userStream :: OAuth -> Credential -> IO ()
