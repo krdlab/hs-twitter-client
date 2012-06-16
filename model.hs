@@ -12,6 +12,7 @@ data Status = Status
   { text      :: Text
   , createdAt :: ByteString
   , user      :: User
+  , idStr     :: ByteString
   }
   deriving (Show, Eq)
 
@@ -26,6 +27,7 @@ instance FromJSON Status where
                           <$> v .: "text"
                           <*> v .: "created_at"
                           <*> v .: "user"
+                          <*> v .: "id_str"
   parseJSON _          = mzero
 
 instance FromJSON User where

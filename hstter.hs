@@ -64,8 +64,9 @@ success Status {..} = do
     Just ctime -> do
       tzone <- getCurrentTimeZone
       let User {..} = user
-      BS.putStrLn $ BS.concat [ "> ", screenName, ": ", name, " (", BC.pack . show $ utcToZonedTime tzone ctime, ")"]
+      BS.putStrLn $ BS.concat ["> ", screenName, ": ", name, " (", BC.pack . show $ utcToZonedTime tzone ctime, ")"]
       TI.putStrLn text
+      BS.putStrLn $ BS.concat ["(", idStr, ")"]
       BS.putStrLn ""
     Nothing    -> putStrLn "> time parse error: created_at"
   where
