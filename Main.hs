@@ -8,7 +8,6 @@ import Data.Time
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.ByteString.Char8 as BC (pack, unpack)
-import Data.Text (Text)
 import qualified Data.Text.IO as TI
 import qualified Data.Text.Encoding as TE
 
