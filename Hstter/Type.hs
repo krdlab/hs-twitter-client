@@ -1,12 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Hstter.Model where
+module Hstter.Type
+  ( Status(..)
+  , User(..)
+  )
+  where
 
-import Control.Applicative ((<$>), (<*>))
-import Control.Monad (mzero)
+import Control.Applicative  ((<$>), (<*>))
+import Control.Monad        (mzero)
+import Data.ByteString      (ByteString)
+import Data.Text            (Text)
 import Data.Aeson
-import Data.Aeson.Types
-import Data.ByteString (ByteString)
-import Data.Text (Text)
 
 data Status = Status
   { text      :: Text
