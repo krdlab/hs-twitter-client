@@ -26,7 +26,6 @@ Executable hstter
                   , authenticate-oauth      >= 1.4
                   , aeson                   >= 0.6
                   , configurator            >= 0.2
-                  , MissingH
   Ghc-options:      -Wall
 
 Source-repository head
